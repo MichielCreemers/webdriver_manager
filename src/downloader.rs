@@ -1,10 +1,38 @@
 //! [TODO] Description...
 
 use crate::error::WebDriverError;
-use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use tokio::fs::{self, File};
 use tokio::io::AsyncWriteExt;
+use walkdir::WalkDir;
+
+pub async fn download_and_unzip(
+    url: &str,
+    install_path: &Path,
+    driver_name: &str,
+) -> Result<PathBuf, WebDriverError> {
+
+    // --- 1. Create a temporary directory for the download.
+    let temp_dir = tempfile::Builder::new()
+        .prefix("webdriver-manager-")
+        .tempdir()
+        .map_err(|e| WebDriverError::IoError {
+            path: PathBuf::from("temp"),
+            source: e,
+        })?;
+    let temp_path = temp_dir.path();
+    let archive_path = temp_path.join("driver.zip");
+
+    // --- 2. Download the zip file to the temporary directory.
+    download_file(url, &archive_path).await?;
+
+    // --- 3. Unzip the file into the final installation directory.
+    unzip_file(&archive_path, install_path).await?;
+
+    // --- 4. Find the driver executable within the unzipped files.
+    // This is necessary because archives might contain a top-level directory.
+    find_driver_executable(install_path, driver_name)
+}
 
 /// Downloads a file from a given URL and saves it to a destination path.
 /// 
@@ -121,4 +149,33 @@ pub async fn unzip_file(archive_path: &Path, extract_to: &Path) -> Result<(), We
     .await
     .unwrap() // Propagate panics from the blocking task.
 
+}
+
+/// Searches a directory for the driver executable file.
+fn find_driver_executable(search_path: &Path, driver_name: &str) -> Result<PathBuf, WebDriverError> {
+
+    let driver_exe_name = if cfg!(target_os = "windows") {
+        format!("{}.exe", driver_name)
+    } else {
+        driver_name.to_string()
+    };
+
+    for entry in WalkDir::new(search_path) {
+        let entry = entry.map_err(|e| WebDriverError::IoError {
+            path: e.path().unwrap_or(search_path).to_path_buf(),
+            source: e.into_io_error().unwrap_or_else(|| {
+                std::io::Error::new(std::io::ErrorKind::Other, "WalkDir error")
+            }),
+        })?;
+        if let Some(file_name) = entry.path().file_name().and_then(|n| n.to_str()) {
+            if file_name == driver_exe_name {
+                return Ok(entry.path().to_path_buf());
+            }
+        }
+    }
+
+    Err(WebDriverError::VerificationError(format!(
+        "Could not find '{}' in the extracted files.",
+        driver_exe_name
+    )))
 }
