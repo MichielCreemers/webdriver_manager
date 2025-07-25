@@ -21,6 +21,9 @@ I designed this project since I needed a tool for some Rust applications I have 
 - [x] Chrome & Chromedriver
 - [ ] Firefox & Geckdriver (_upcoming_)
 - [ ] Edge & msedgedriver (_upcoming_)
+- [ ] iedriver
+- [ ] operadriver
+- [ ] safaridriver (comes pre-installed on macOS but some methods might be usefull)
 
 # 🔮 Future Plans
 
@@ -28,6 +31,9 @@ I designed this project since I needed a tool for some Rust applications I have 
 - **Smart Downloads 2** Automatic retries if downloads fail.
 - **GeckoDriver Support**: Implement the `WebDriverManager` trait for Firefox's `geckodriver`.
 - **EdgeDriver Support**: Implement the trait for Microsoft Edge's `msedgedriver`.
+- **CLI Tool**: A CLI tool of this webdriver_manager so everyone can use it cross-platform.
+- **Updating**: Updating installed drivers and/or remove outdated drivers.
+-
 
 > 💡 Dont hesitate to propose some features that might be usefull!
 
