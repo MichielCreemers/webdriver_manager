@@ -1,13 +1,95 @@
 //! [TODO] Description...
 
 use crate::error::WebDriverError;
+use crate::browser::get_browser_version;
+use crate::downloader::{download_and_unzip};
+use crate::WebDriverManager;
+use async_trait::async_trait;
 use serde::Deserialize;
-use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 // The main URL for the new JSON endpoints.
 const CHROMEDRIVER_URLS_ENDPOINT: &str = 
     "https://googlechromelabs.github.io/chrome-for-testing/known-good-versions-with-downloads.json";
+
+/// Public struct for managing Chromedriver.
+pub struct ChromeDriver;
+
+#[async_trait]
+impl WebDriverManager for ChromeDriver {
+    fn get_driver_name(&self) -> &str {
+        "chromedriver"
+    }
+
+    async fn get_browser_version(
+        &self, browser_path: Option<&Path>,
+    ) -> Result<String, WebDriverError> {
+        get_browser_version("chrome", browser_path).await
+    }
+
+    async fn get_driver_version(&self, browser_version: &str) -> Result<String, WebDriverError> {
+        let (driver_version, _url) = get_chromedriver_download_url(browser_version).await?;
+        Ok(driver_version)
+    }
+
+    async fn get_download_url(&self, driver_version: &str) -> Result<String, WebDriverError> {
+        let browser_version = driver_version;
+        let (_driver_version, url) = get_chromedriver_download_url(browser_version).await?;
+        Ok(url)
+    }
+
+    async fn download_and_install(
+        &self,
+        driver_version: &str,
+        install_path: &Path,
+    ) -> Result<PathBuf, WebDriverError> {
+        let (_driver_version, url) = get_chromedriver_download_url(driver_version).await?;
+
+        let driver_name = self.get_driver_name();
+        let driver_path = download_and_unzip(&url, install_path, driver_name).await?;
+
+        self.verify_driver(&driver_path).await?;
+        Ok(driver_path)
+    }
+
+    async fn verify_driver(&self, driver_path: &Path) -> Result<(), WebDriverError> {
+
+        let mut command = tokio::process::Command::new(driver_path);
+        command.arg("--version");
+
+        let output = command
+            .output()
+            .await
+            .map_err(|e| WebDriverError::CommandExecutionError { 
+                command: format!("{:?}", command), 
+                source: e, 
+            })?;
+
+        if !output.status.success() {
+            return Err(WebDriverError::VerificationError(
+                "Driver process exited with a non-zero status.".to_string(),
+            ));
+        }
+
+        let stdout = String::from_utf8(output.stdout).map_err(|e| {
+            WebDriverError::CommandOutputParsingError { 
+                command: format!("{:?}", command), 
+                source: e, 
+            }
+        })?;
+
+        if !stdout.contains("ChromeDriver") {
+            return Err(WebDriverError::VerificationError(format!(
+                "Unexpected outpur during verificatioon: {}",
+                stdout
+            )));
+        }
+
+        Ok(())
+
+    }
+
+}
 
 /// Represents a single download URL for a specific platform.
 #[derive(Debug, Deserialize)]
@@ -35,10 +117,10 @@ struct KnownGoodVersions {
     versions: Vec<Version>,
 }
 
-/// Fetches the driver download URL for a specific browser version.
+/// Fetches the driver download URL for a specific *browser* version.
 /// 
 /// It queries the Google JSON endpoints, finds the closest matching version,
-/// and returns the download URL for the correct platform.
+/// and returns `(driver_version, url)`
 async fn get_chromedriver_download_url(
     browser_version: &str,
 ) -> Result<(String, String), WebDriverError> {
