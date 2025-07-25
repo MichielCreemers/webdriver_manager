@@ -10,5 +10,4 @@ I designed this project since I needed a tool for some Rust applications I have 
 
 # ✨ Features
 
-- > blockquote
-- ==important==
+- **Automatic Browser Detection ** d
