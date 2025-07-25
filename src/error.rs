@@ -1,5 +1,6 @@
 use thiserror::Error;
 use std::path::PathBuf;
+use std::io;
 
 /// Error type for all possible failures in the library.
 #[derive(Error, Debug)]
@@ -41,6 +42,12 @@ pub enum WebDriverError {
         browser_version: String,
         platform: String,
     },
+
+    #[error("Could not find a download URL for driver version {driver_version} on platform {platform}")]
+    DriverUrlNotFound {
+        driver_version: String,
+        platform: String,
+    },
     
     #[error("I/O error accessing path '{path}': {source}")]
     IoError {
@@ -70,4 +77,10 @@ pub enum WebDriverError {
 
     #[error("An unknown error has occurred: {0}")]
     Custom(String),
+
+    #[error("Unsupported platform: {0}")]
+    UnsupportedPlatform(String),
+
+    #[error("An error occurred while verifying the driver")]
+    VerificationError(String),
 }
